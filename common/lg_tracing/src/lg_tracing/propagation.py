@@ -13,6 +13,8 @@ from openinference.instrumentation import using_attributes
 from opentelemetry import baggage, propagate
 from opentelemetry import context as otel_context
 
+from lg_tracing.spans import _active_context
+
 SESSION_KEY = "session_id"
 USER_KEY = "user_id"
 REQUEST_KEY = "request_id"
@@ -45,9 +47,12 @@ def request_context(*, session_id: str, user_id: str, request_id: str, ticker: s
 
 
 def inject_carrier() -> dict[str, str]:
-    """traceparent + baggage for the current context, for HTTP headers or MCP _meta."""
+    """traceparent + baggage for the current context, for HTTP headers or MCP _meta.
+
+    Inside a LangGraph node or tool, traceparent names that node/tool span (see _active_context).
+    """
     carrier: dict[str, str] = {}
-    propagate.inject(carrier)
+    propagate.inject(carrier, context=_active_context())
     return carrier
 
 
