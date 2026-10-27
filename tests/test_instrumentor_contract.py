@@ -77,38 +77,44 @@ def agent_graph(probe):
     return builder.compile(name="contract_graph")
 
 
-def probe_tool(kind: str, captured: list[str]):
+def probe_tool(kind: str, captured: list[dict[str, str]]):
     if kind == "async":
 
         @tool
         async def probe() -> str:
             """Record the traceparent an outbound call would send."""
-            captured.append(parent_id(inject_carrier()))
+            captured.append(inject_carrier())
             return "ok"
     else:
 
         @tool
         def probe() -> str:
             """Record the traceparent an outbound call would send."""
-            captured.append(parent_id(inject_carrier()))
+            captured.append(inject_carrier())
             return "ok"
 
     return probe
 
 
-def outbound_node(kind: str, captured: list[str]):
+def outbound_node(kind: str, captured: list[dict[str, str]]):
     if kind == "async":
 
         async def outbound(state: State):
-            captured.append(parent_id(inject_carrier()))
+            captured.append(inject_carrier())
             return {"value": state["value"]}
     else:
 
         def outbound(state: State):
-            captured.append(parent_id(inject_carrier()))
+            captured.append(inject_carrier())
             return {"value": state["value"]}
 
     return outbound
+
+
+def assert_carrier_from(carrier: dict[str, str], span) -> None:
+    """The carrier names span as parent and still carries the request baggage."""
+    assert parent_id(carrier) == span_hex(span)
+    assert "session_id=sess-c" in carrier.get("baggage", "")
 
 
 def span_hex(span) -> str:
@@ -131,18 +137,20 @@ async def test_graph_root_is_child_of_extracted_context(exporter):
 
 @pytest.mark.parametrize("node_kind", ["async", "sync"])
 async def test_inject_inside_node_points_at_node_span(exporter, node_kind):
-    captured: list[str] = []
+    captured: list[dict[str, str]] = []
     await run_from_upstream(two_node_graph(outbound_node(node_kind, captured)), {"value": "x"})
 
-    assert captured == [span_hex(only_span(exporter, "outbound", scope=INSTRUMENTOR_SCOPE))]
+    assert len(captured) == 1
+    assert_carrier_from(captured[0], only_span(exporter, "outbound", scope=INSTRUMENTOR_SCOPE))
 
 
 @pytest.mark.parametrize("tool_kind", ["async", "sync"])
 async def test_inject_inside_toolnode_tool_points_at_tool_span(exporter, tool_kind):
-    captured: list[str] = []
+    captured: list[dict[str, str]] = []
     await run_from_upstream(agent_graph(probe_tool(tool_kind, captured)), {"messages": [HumanMessage("go")]})
 
-    assert captured == [span_hex(only_span(exporter, "probe", scope=INSTRUMENTOR_SCOPE))]
+    assert len(captured) == 1
+    assert_carrier_from(captured[0], only_span(exporter, "probe", scope=INSTRUMENTOR_SCOPE))
 
 
 async def test_current_trace_id_inside_node_is_graph_trace(exporter):
@@ -152,10 +160,12 @@ async def test_current_trace_id_inside_node_is_graph_trace(exporter):
         trace_ids.append(current_trace_id())
         return {"value": state["value"]}
 
-    await run_from_upstream(two_node_graph(outbound), {"value": "x"})
+    # No span is current around ainvoke, so only the instrumentor's node span can supply the id.
+    await two_node_graph(outbound).ainvoke({"value": "x"})
 
     root = only_span(exporter, "contract_graph", scope=INSTRUMENTOR_SCOPE)
     assert trace_ids == [format(root.context.trace_id, "032x")]
+    assert trace_ids != [""]
 
 
 async def test_request_attributes_reach_every_instrumented_span(exporter):
