@@ -1,8 +1,11 @@
+import importlib.util
+
 from opentelemetry.sdk.trace.export import ConsoleSpanExporter
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 from opentelemetry.trace import NoOpTracer
 
-from lg_tracing.provider import build_exporter, build_tracer_provider
+import lg_tracing.provider as provider_module
+from lg_tracing.provider import build_exporter, build_tracer_provider, instrument
 
 
 def test_allowlisted_tracers_record_and_others_are_noop():
@@ -39,3 +42,30 @@ def test_grpc_exporter_with_arize_keys(monkeypatch):
     from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
 
     assert isinstance(build_exporter(), OTLPSpanExporter)
+
+
+class SpyInstrumentor:
+    calls = 0
+
+    def instrument(self, **kwargs):
+        SpyInstrumentor.calls += 1
+
+
+def test_instrument_skipped_without_langchain_core(monkeypatch):
+    real_find_spec = importlib.util.find_spec
+    monkeypatch.setattr(
+        importlib.util,
+        "find_spec",
+        lambda name, *a: None if name == "langchain_core" else real_find_spec(name, *a),
+    )
+    monkeypatch.setattr(provider_module, "LangChainInstrumentor", SpyInstrumentor)
+    SpyInstrumentor.calls = 0
+    instrument(build_tracer_provider("websearch-mcp", InMemorySpanExporter()))
+    assert SpyInstrumentor.calls == 0
+
+
+def test_instrument_runs_with_langchain_core(monkeypatch):
+    monkeypatch.setattr(provider_module, "LangChainInstrumentor", SpyInstrumentor)
+    SpyInstrumentor.calls = 0
+    instrument(build_tracer_provider("research-agent", InMemorySpanExporter()))
+    assert SpyInstrumentor.calls == 1

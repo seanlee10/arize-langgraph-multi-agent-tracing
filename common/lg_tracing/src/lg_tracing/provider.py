@@ -1,5 +1,6 @@
 """TracerProvider, exporter and propagator setup for exporting spans to Arize AX."""
 
+import importlib.util
 import os
 
 from openinference.instrumentation.langchain import LangChainInstrumentor
@@ -82,7 +83,9 @@ def configure_propagator() -> None:
 
 
 def instrument(provider: TracerProvider) -> None:
-    LangChainInstrumentor().instrument(tracer_provider=provider)
+    # websearch-mcp has no LangChain; instrumenting there logs a DependencyConflict error.
+    if importlib.util.find_spec("langchain_core") is not None:
+        LangChainInstrumentor().instrument(tracer_provider=provider)
 
 
 def setup_tracing(service_name: str) -> TracerProvider:
