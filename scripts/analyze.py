@@ -19,7 +19,10 @@ def main() -> int:
         json={"ticker": args.ticker, "session_id": args.session},
         timeout=300,
     )
-    print(json.dumps(response.json(), indent=2))
+    try:
+        print(json.dumps(response.json(), indent=2))
+    except ValueError:  # e.g. a proxy or server error page
+        print(f"HTTP {response.status_code}: {response.text}")
     return 0 if response.is_success else 1
 
 
