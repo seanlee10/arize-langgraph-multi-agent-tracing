@@ -137,6 +137,15 @@ async def test_decision_agent_down_returns_502_with_trace_id(exporter):
     assert detail["error"]
 
 
+async def test_endless_search_loop_returns_502(exporter):
+    model = ScriptedChatModel(
+        responses=[tool_call("web_search", {"query": "NVDA"}, id=f"c{i}") for i in range(30)]
+    )
+    resp = await post(make_app(model), {"ticker": "NVDA"})
+    assert resp.status_code == 502
+    assert set(resp.json()["detail"]) == {"error", "trace_id"}
+
+
 @pytest.mark.parametrize("body", ["not json", '{"decision": "hold"}'])
 async def test_malformed_decision_response_returns_502_with_trace_id(exporter, body):
     resp = await post(make_app(happy_model(), decision_body=body), {"ticker": "NVDA"})

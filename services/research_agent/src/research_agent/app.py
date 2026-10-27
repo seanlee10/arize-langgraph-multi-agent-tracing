@@ -9,11 +9,12 @@ import anthropic
 from fastapi import FastAPI, HTTPException
 from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage
+from langgraph.errors import GraphRecursionError
 from langgraph.graph.state import CompiledStateGraph
 from pydantic import BaseModel, Field, field_validator
 
 from lg_tracing import request_context, setup_tracing
-from research_agent.graph import DecisionAgentError, build_research_graph
+from research_agent.graph import RECURSION_LIMIT, DecisionAgentError, build_research_graph
 from research_agent.web_search import make_web_search_tool
 
 DEFAULT_MODEL = "claude-opus-5-5"
@@ -56,11 +57,16 @@ def create_app(graph: CompiledStateGraph, *, lifespan=None) -> FastAPI:
         ):
             try:
                 state = await graph.ainvoke(
-                    {"messages": [HumanMessage(f"Research {body.ticker}")], "ticker": body.ticker}
+                    {"messages": [HumanMessage(f"Research {body.ticker}")], "ticker": body.ticker},
+                    config={"recursion_limit": RECURSION_LIMIT},
                 )
             except DecisionAgentError as exc:
                 raise HTTPException(
                     status_code=502, detail={"error": str(exc), "trace_id": exc.trace_id}
+                ) from exc
+            except GraphRecursionError as exc:
+                raise HTTPException(
+                    status_code=502, detail={"error": "research hit the step limit", "trace_id": ""}
                 ) from exc
             except anthropic.APIError as exc:
                 raise HTTPException(status_code=502, detail={"error": str(exc), "trace_id": ""}) from exc

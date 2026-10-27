@@ -14,14 +14,15 @@ from lg_tracing import current_trace_id, inject_carrier
 
 RESEARCH_PROMPT = (
     "You are an equity research agent. Use the web_search tool to gather recent news, earnings "
-    "and analyst opinion about the requested ticker. Search as many times as you need, then "
-    "reply without calling a tool once you have enough material."
+    "and analyst opinion about the requested ticker. Run at most 3 searches, then reply without "
+    "calling a tool once you have enough material."
 )
 SUMMARIZE_PROMPT = (
     "Write a concise research brief on the ticker from the research material provided: key facts, "
     "catalysts, risks and overall sentiment. Do not give a buy/hold/sell recommendation."
 )
 DECISION_TIMEOUT_SECONDS = 120
+RECURSION_LIMIT = 25
 
 
 class DecisionAgentError(Exception):
