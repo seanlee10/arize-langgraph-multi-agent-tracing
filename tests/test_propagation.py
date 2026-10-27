@@ -1,4 +1,5 @@
 import json
+import sys
 import uuid
 from contextlib import contextmanager
 
@@ -13,6 +14,7 @@ from lg_tracing.propagation import (
     inject_carrier,
     request_context,
 )
+import lg_tracing.spans as lg_spans
 from tests.helpers import only_span
 
 tracer = trace.get_tracer("lg_tracing")
@@ -76,3 +78,19 @@ def test_header_keys_are_case_insensitive(exporter):
     span = only_span(exporter, "callee")
     assert span.parent.span_id == caller.get_span_context().span_id
     assert span.attributes["session.id"] == "s1"
+
+
+def test_inject_without_langchain_core_uses_plain_current_span(exporter, monkeypatch):
+    monkeypatch.setitem(sys.modules, "langchain_core.runnables.config", None)
+    with tracer.start_as_current_span("plain") as span:
+        carrier = inject_carrier()
+    assert carrier["traceparent"].split("-")[2] == format(span.get_span_context().span_id, "016x")
+
+
+def test_span_lookup_failure_is_not_swallowed(monkeypatch):
+    def broken():
+        raise AttributeError("openinference API changed")
+
+    monkeypatch.setattr(lg_spans, "get_current_span", broken)
+    with pytest.raises(AttributeError):
+        inject_carrier()
