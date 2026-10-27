@@ -9,6 +9,7 @@ dev = [
     "lg-tracing",
     "websearch-mcp",
     "decision-agent",
+    "research-agent",
     "langchain-core",
     "httpx>=0.27",
     "pytest>=8",
@@ -20,13 +21,16 @@ dev = [
 package = false
 
 [tool.uv.workspace]
-members = ["common/lg_tracing", "services/websearch_mcp", "services/decision_agent"]
+members = ["common/lg_tracing", "services/websearch_mcp", "services/decision_agent", "services/research_agent"]
 
 [tool.uv.sources]
 lg-tracing = { workspace = true }
 websearch-mcp = { workspace = true }
 decision-agent = { workspace = true }
+research-agent = { workspace = true }
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+# openinference (third-party) calls AIMessage.text() as a method on this langchain-core version.
+filterwarnings = ["ignore:Calling .text\\(\\) as a method is deprecated:DeprecationWarning"]
 testpaths = ["tests"]
