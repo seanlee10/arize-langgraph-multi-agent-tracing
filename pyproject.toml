@@ -7,6 +7,7 @@ dependencies = []
 [dependency-groups]
 dev = [
     "lg-tracing",
+    "websearch-mcp",
     "langchain-core",
     "httpx>=0.27",
     "pytest>=8",
@@ -18,10 +19,11 @@ dev = [
 package = false
 
 [tool.uv.workspace]
-members = ["common/lg_tracing"]
+members = ["common/lg_tracing", "services/websearch_mcp"]
 
 [tool.uv.sources]
 lg-tracing = { workspace = true }
+websearch-mcp = { workspace = true }
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
