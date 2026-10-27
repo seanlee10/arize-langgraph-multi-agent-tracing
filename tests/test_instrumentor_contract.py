@@ -63,7 +63,7 @@ def two_node_graph(outbound):
 
 
 def agent_graph(probe):
-    model = ScriptedChatModel(responses=[tool_call("probe", {}), AIMessage("done")])
+    model = ScriptedChatModel(responses=[tool_call("probe", {}), AIMessage("done")]).bind_tools([probe])
 
     async def agent(state: MessagesState):
         return {"messages": [await model.ainvoke(state["messages"])]}

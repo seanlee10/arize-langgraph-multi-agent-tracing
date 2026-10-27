@@ -1,10 +1,10 @@
 import httpx
 import pytest
 from opentelemetry.trace import StatusCode
-from langchain_core.messages import AIMessage, ToolMessage
+from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
 from research_agent.app import create_app
-from research_agent.graph import build_research_graph
+from research_agent.graph import SUMMARIZE_PROMPT, build_research_graph
 from research_agent.web_search import make_web_search_tool
 from tests.fakes import ScriptedChatModel, tool_call
 from tests.helpers import only_span
@@ -110,6 +110,23 @@ async def test_mcp_failure_reaches_model_as_tool_error(exporter):
     assert "Error executing tool web_search" in tool_messages[0].content
     client = only_span(exporter, "web_search", scope="openinference.instrumentation.langchain")
     assert client.status.status_code == StatusCode.ERROR
+
+
+async def test_summarize_sees_research_material_not_tool_history(exporter):
+    seen: list[list] = []
+
+    class Recording(ScriptedChatModel):
+        def _generate(self, messages, *args, **kwargs):
+            seen.append(list(messages))
+            return super()._generate(messages, *args, **kwargs)
+
+    resp = await post(make_app(Recording(responses=happy_model().responses)), {"ticker": "NVDA"})
+    assert resp.status_code == 200
+    system, material = seen[-1]
+    assert system.content == SUMMARIZE_PROMPT
+    assert isinstance(material, HumanMessage)
+    for expected in ("NVDA", "NVDA beats", "notes"):
+        assert expected in material.content
 
 
 async def test_decision_agent_down_returns_502_with_trace_id(exporter):

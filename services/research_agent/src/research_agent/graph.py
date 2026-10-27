@@ -4,7 +4,7 @@ from typing import Any
 
 import httpx
 from langchain_core.language_models import BaseChatModel
-from langchain_core.messages import SystemMessage
+from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
 from langchain_core.tools import BaseTool
 from langgraph.graph import END, START, MessagesState, StateGraph
 from langgraph.graph.state import CompiledStateGraph
@@ -18,8 +18,8 @@ RESEARCH_PROMPT = (
     "reply without calling a tool once you have enough material."
 )
 SUMMARIZE_PROMPT = (
-    "Write a concise research brief on the ticker from the research above: key facts, catalysts, "
-    "risks and overall sentiment. Do not give a buy/hold/sell recommendation."
+    "Write a concise research brief on the ticker from the research material provided: key facts, "
+    "catalysts, risks and overall sentiment. Do not give a buy/hold/sell recommendation."
 )
 DECISION_TIMEOUT_SECONDS = 120
 
@@ -54,8 +54,14 @@ def build_research_graph(
         return "tools" if state["messages"][-1].tool_calls else "summarize"
 
     async def summarize(state: ResearchState) -> dict[str, Any]:
-        reply = await model.ainvoke([SystemMessage(SUMMARIZE_PROMPT), *state["messages"]])
-        return {"research_brief": reply.text}
+        # Pass the material as text: replaying tool_use/thinking blocks without the same tools 400s.
+        results = [m.text for m in state["messages"] if isinstance(m, ToolMessage)]
+        notes = state["messages"][-1].text
+        material = "\n\n".join(
+            [f"Ticker: {state['ticker']}", "Search results:", *results, "Research notes:", notes]
+        )
+        reply = await model.ainvoke([SystemMessage(SUMMARIZE_PROMPT), HumanMessage(material)])
+        return {"research_brief": str(reply.text)}
 
     async def call_decision(state: ResearchState) -> dict[str, Any]:
         # inject_carrier() must run inside this node so decision-agent parents to this span.
