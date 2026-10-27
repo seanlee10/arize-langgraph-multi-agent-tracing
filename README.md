@@ -70,7 +70,7 @@ setup_tracing("my-service")   # provider, OTLP export, LangChainInstrumentor
 ```python
 from lg_tracing import inject_carrier
 httpx.post(url, json=payload, headers=inject_carrier())        # HTTP
-await session.call_tool(name, args, meta=inject_carrier())     # MCP
+await client.call_tool(name, args, meta=inject_carrier())      # MCP
 ```
 
 3. In the handler of the receiving service, around the graph:
@@ -107,7 +107,7 @@ From `uv.lock`. Re-run `uv run pytest` after upgrading any of them.
 ## Known limitations
 
 - The instrumentor does not set node or tool spans as the current span (see above). A newer version may change this; the contract tests will fail if it does, which is the signal to revisit `_active_context` in `lg_tracing/spans.py`.
-- The MCP server masks raw tool exception text. The client gets a generic error, not the original message; the detail is on the server-side span.
+- The MCP server masks raw tool exception text. The client gets a generic error, not the original message; the full exception is recorded on the server-side span.
 - Demo scope: no auth between services, no retries, one exporter per service.
 
 ## Tests
