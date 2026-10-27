@@ -17,11 +17,11 @@ Needs Docker, [uv](https://docs.astral.sh/uv/), an Anthropic key and a Tavily ke
 
 ```bash
 cp .env.example .env     # fill in ANTHROPIC_API_KEY, TAVILY_API_KEY, ARIZE_SPACE_ID, ARIZE_API_KEY
-docker compose up --build
+docker compose up --build -d
 uv run scripts/analyze.py NVDA
 ```
 
-The script prints the decision and a `trace_id`. If the Arize keys are blank, spans print to the container logs instead. Pass `--session my-session` to set the Arize session id.
+The script prints the decision and a `trace_id`. If the Arize keys are blank, spans print to the container logs instead (`docker compose logs -f`). Pass `--session my-session` to set the Arize session id.
 
 ## Trace screenshot
 
@@ -83,7 +83,7 @@ with continue_request_context(request.headers):                # MCP: ctx.reques
 
 The rule: **inject where your node or tool makes the outbound call; extract in the handler before you invoke the graph.** The instrumentor handles everything inside a process. The entry service opens `request_context(...)` once, instead of `continue_request_context`.
 
-One catch: the instrumentor creates node and tool spans but never makes them the current OpenTelemetry span. So `inject_carrier()` finds the running span with `openinference.instrumentation.langchain.get_current_span()`. If you copy the helper, keep that call; plain `trace.get_current_span()` returns the caller's span and the remote spans attach one level too high. `tests/test_instrumentor_contract.py` pins this behaviour per version.
+One catch: the instrumentor creates node and tool spans but never makes them the current OpenTelemetry span. So `inject_carrier()` finds the running span with `openinference.instrumentation.langchain.get_current_span()`. If you copy the helper, keep that call. Plain `trace.get_current_span()` returns whatever surrounded `graph.ainvoke`: in the entry service that is no span at all, so no `traceparent` is sent and each downstream service starts a new trace; in a downstream service it is the upstream caller's span, so the remote spans attach above this service's graph instead of under the calling node. `tests/test_instrumentor_contract.py` pins this behaviour per version.
 
 The code lives in `common/lg_tracing/src/lg_tracing/`. The working call sites are `services/research_agent/src/research_agent/graph.py` (HTTP), `web_search.py` (MCP) and `services/decision_agent/src/decision_agent/app.py` (handler).
 
