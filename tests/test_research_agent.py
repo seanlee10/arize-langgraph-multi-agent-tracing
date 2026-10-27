@@ -1,5 +1,6 @@
 import httpx
 import pytest
+from opentelemetry.trace import StatusCode
 from langchain_core.messages import AIMessage, ToolMessage
 
 from research_agent.app import create_app
@@ -16,12 +17,14 @@ async def fake_search(query: str, max_results: int) -> list[dict]:
     return [{"title": f"{query} beats", "url": "https://example.com", "content": "c"}]
 
 
-def make_app(model, *, search=fake_search, decision_status=200, recorded=None):
+def make_app(model, *, search=fake_search, decision_status=200, decision_body=None, recorded=None):
     def handler(request: httpx.Request) -> httpx.Response:
         if recorded is not None:
             recorded.update(request.headers)
         if decision_status != 200:
             return httpx.Response(decision_status, text="down")
+        if decision_body is not None:
+            return httpx.Response(200, content=decision_body)
         return httpx.Response(200, json=DECISION)
 
     graph = build_research_graph(
@@ -105,6 +108,8 @@ async def test_mcp_failure_reaches_model_as_tool_error(exporter):
     assert [m.status for m in tool_messages] == ["error"]
     # The MCP server deliberately masks the raw exception text.
     assert "Error executing tool web_search" in tool_messages[0].content
+    client = only_span(exporter, "web_search", scope="openinference.instrumentation.langchain")
+    assert client.status.status_code == StatusCode.ERROR
 
 
 async def test_decision_agent_down_returns_502_with_trace_id(exporter):
@@ -113,6 +118,14 @@ async def test_decision_agent_down_returns_502_with_trace_id(exporter):
     detail = resp.json()["detail"]
     assert int(detail["trace_id"], 16) == only_span(exporter, "research_graph").context.trace_id
     assert detail["error"]
+
+
+@pytest.mark.parametrize("body", ["not json", '{"decision": "hold"}'])
+async def test_malformed_decision_response_returns_502_with_trace_id(exporter, body):
+    resp = await post(make_app(happy_model(), decision_body=body), {"ticker": "NVDA"})
+    assert resp.status_code == 502
+    detail = resp.json()["detail"]
+    assert int(detail["trace_id"], 16) == only_span(exporter, "research_graph").context.trace_id
 
 
 async def test_lowercase_ticker_is_normalised(exporter):

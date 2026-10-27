@@ -69,8 +69,12 @@ def build_research_graph(
                     timeout=DECISION_TIMEOUT_SECONDS,
                 )
                 response.raise_for_status()
-                return {"decision": response.json(), "trace_id": trace_id}
-        except httpx.HTTPError as exc:
+                decision = response.json()
+                missing = {"decision", "confidence", "rationale"} - set(decision)
+                if missing:
+                    raise ValueError(f"decision-agent response missing {sorted(missing)}")
+                return {"decision": decision, "trace_id": trace_id}
+        except (httpx.HTTPError, ValueError, TypeError) as exc:
             raise DecisionAgentError(str(exc), trace_id=trace_id) from exc
 
     builder = StateGraph(ResearchState)

@@ -30,5 +30,4 @@ def make_web_search_tool(server: str | MCPServer, *, timeout_seconds: float = 30
             raise ToolException(text or "web_search failed")
         return text
 
-    web_search.handle_tool_error = True
     return web_search
