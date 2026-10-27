@@ -99,6 +99,13 @@ async def test_tool_error_goes_back_to_model(exporter):
     assert only_span(exporter, "force_index").status.status_code == StatusCode.ERROR
 
 
+async def test_invalid_submit_goes_back_to_model(exporter):
+    model = ScriptedChatModel(responses=[submit(id="c1", confidence=85), submit(id="c2")])
+    resp = await post(create_app(model=model, tools=[force_index]), BODY)
+    assert resp.status_code == 200
+    assert resp.json() == {"decision": "buy", "confidence": 0.7, "rationale": "FI up"}
+
+
 @pytest.mark.parametrize("ticker", ["nvda ", " brk.b"])
 async def test_ticker_is_normalised(exporter, ticker):
     model = ScriptedChatModel(responses=[submit(id="c1")])

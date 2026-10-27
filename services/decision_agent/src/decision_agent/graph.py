@@ -40,7 +40,12 @@ def build_decision_graph(
     def after_tools(state: MessagesState) -> str:
         # The AI message that requested these tools sits just before the tool results.
         ai_message = next(m for m in reversed(state["messages"]) if isinstance(m, AIMessage))
-        submitted = any(call["name"] == "submit_decision" for call in ai_message.tool_calls)
+        submit_ids = {call["id"] for call in ai_message.tool_calls if call["name"] == "submit_decision"}
+        # A rejected submit (e.g. bad args) goes back to the model like any other tool error.
+        submitted = any(
+            isinstance(m, ToolMessage) and m.tool_call_id in submit_ids and m.status != "error"
+            for m in state["messages"]
+        )
         return END if submitted else "agent"
 
     builder = StateGraph(MessagesState)
